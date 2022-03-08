@@ -3,9 +3,13 @@
   "version": "0.1.0",
   "description": "Nexus plugin to validate and transform graphql arguments",
   "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "types": "dist/index.d.ts",
   "scripts": {
     "start": "ts-node-dev --transpile-only --no-notify src/index.ts",
-    "build": "tsc",
+    "build": "tsup-node src/index.ts --dts --format esm,cjs --minify",
     "test": "jest"
   },
   "repository": {
@@ -28,6 +32,7 @@
     "nexus": "^1.3.0",
     "prettier": "^2.5.1",
     "ts-node-dev": "^1.1.8",
+    "tsup": "^5.12.0",
     "typescript": "^4.6.2"
   },
   "peerDependencies": {
