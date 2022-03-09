@@ -1,5 +1,5 @@
 import { MaybeNullable } from "./types";
-import { Transformer } from "./plugin";
+import { Transformer } from ".";
 
 //===================================
 // Unknowns

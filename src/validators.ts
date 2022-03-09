@@ -1,7 +1,7 @@
 import { MaybePromise } from "nexus/dist/core";
 import { MaybeNull, MaybeNullable } from "./types";
 
-import { ErrorValidationResultExtras, Validator } from "./plugin";
+import { ErrorValidationResultExtras, Validator } from ".";
 
 // TODO Maybe find a way to make sure that error codes are unique (e.g. make error code same as name as validator function)
 
