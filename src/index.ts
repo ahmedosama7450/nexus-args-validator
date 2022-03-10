@@ -1,67 +1,51 @@
-import type { GraphQLResolveInfo } from "graphql";
 import { plugin } from "nexus";
 import {
   ArgsValue,
-  GetGen,
   completeValue,
   MaybePromise,
   printedGenTyping,
   printedGenTypingImport,
-  SourceValue,
   isPromiseLike,
 } from "nexus/dist/core";
 import { join } from "path";
+
 import { assignObjectAt } from "./utils";
-
-//-------------------------------------------
-/* TODO
-  List of things to improve:
-  1. Allow customization of the error thrown
-  2. Accept recursive arrays of validators and transformers
-  3. (IMPORTANT) We need to cache validate and transform functions or provide variations of them for when root, args, context,... are not needed
-  4. When validating an array of validators, we return only the first validation error we get. Maybe allow customizing this to return all
-     the errors. This means changing the ValidationResult type into something like ErrorValidationResult | ErrorValidationResult[] | undefined
-     which has has some pitfalls e.g. the ability to discriminate between the union memebers
-  5. Make a warning when user uses transform but there are no arguments defined, i.e. when you recieve an empty object of args ({})
-  6. Make sure that the plugin doesn't return an empty validation errors object or undefined. This is assumed on the frontend
-  7. Simplify execute function using a traverseObject utility
-  8. validate function is not 100% type safe. It infers types correctly, but it doesn't raise an error for unkown keys (This is so important)
-  9. Validate and transform for all fields at once
-*/
-//-------------------------------------------
-
-export type ErrorValidationResultExtras = {
-  [key: string]: number | string | boolean;
-} | null;
-
-/**
- * First element represents errorCode
- *
- * Second element represents any extras related to validation
- */
-export type ErrorValidationResult = [string, ErrorValidationResultExtras];
+import { Resolver } from "./types";
 
 /**
  * undefined means validation passed
  */
 export type ValidationResult = ErrorValidationResult | undefined;
 
+/**
+ * First element represents error code
+ *
+ * Second element represents any extras related to validation
+ */
+export type ErrorValidationResult = [string, ErrorValidationResultExtras];
+
+export type ErrorValidationResultExtras = {
+  [key: string]: number | string | boolean;
+} | null;
+
+export type ErrorsTree = {
+  [key: string]: ErrorValidationResult | ErrorsTree;
+};
+
+export type MaybeErrorsTree = ErrorsTree | null;
+
 export type Validator<T> = (arg: T) => MaybePromise<ValidationResult>;
 
 export type Transformer<T> = (arg: T) => MaybePromise<T>;
 
 /**
- * Could be a validator or transformer
- * T is arg type
- * R is what is return, It' ValidationResult in case of validators, T in case of transformers
+ * Could be a validator or transformer.
+ *
+ * `T` is arg type
+ *
+ * `R` is what is return, It' ValidationResult in case of validators, T in case of transformers
  */
 type Executor<T, R> = (arg: T) => MaybePromise<R>;
-
-type ErrorsTree = {
-  [key: string]: ErrorValidationResult | ErrorsTree;
-};
-
-type MaybeErrorsTree = ErrorsTree | null;
 
 type GeneralArgsValue = { [key: string]: any };
 
@@ -80,8 +64,14 @@ type BaseValidatorTree<
   F extends string,
   Args extends ArgsValue<string, string>
 > = {
-  [key in keyof Args]?: Args[key] extends { [key: string]: any }
-    ? BaseValidatorTree<T, F, Args[key]>
+  [key in keyof Args]?: Args[key] extends
+    | { [key: string]: any }
+    | null
+    | undefined
+    ?
+        | BaseValidatorTree<T, F, Args[key]>
+        | Validator<Args[key]>
+        | Validator<Args[key]>[]
     : Validator<Args[key]> | Validator<Args[key]>[];
 };
 
@@ -95,8 +85,14 @@ type BaseTransformerTree<
   F extends string,
   Args extends ArgsValue<string, string>
 > = {
-  [key in keyof Args]?: Args[key] extends { [key: string]: any }
-    ? BaseTransformerTree<T, F, Args[key]>
+  [key in keyof Args]?: Args[key] extends
+    | { [key: string]: any }
+    | null
+    | undefined
+    ?
+        | BaseTransformerTree<T, F, Args[key]>
+        | Transformer<Args[key]>
+        | Transformer<Args[key]>[]
     : Transformer<Args[key]> | Transformer<Args[key]>[];
 };
 
@@ -105,33 +101,29 @@ type TransformerTree<
   FieldName extends string
 > = BaseTransformerTree<TypeName, FieldName, ArgsValue<TypeName, FieldName>>;
 
-type BaseExecutorTree<Args extends ArgsValue<"", "">, R> = {
-  [key in keyof Args]?: Args[key] extends { [key: string]: any }
-    ? BaseExecutorTree<Args[key], R>
+type BaseExecutorTree<Args extends ArgsValue<string, string>, R> = {
+  [key in keyof Args]?: Args[key] extends
+    | { [key: string]: any }
+    | null
+    | undefined
+    ?
+        | BaseExecutorTree<Args[key], R>
+        | Executor<Args[key], R>
+        | Executor<Args[key], R>[]
     : Executor<Args[key], R> | Executor<Args[key], R>[];
 };
 
-type ExecutorTree<R> = BaseExecutorTree<ArgsValue<"", "">, R>;
+type ExecutorTree<R> = BaseExecutorTree<ArgsValue<string, string>, R>;
 
 export type ValidateResolver<
   TypeName extends string,
   FieldName extends string
-> = (
-  root: SourceValue<TypeName>,
-  args: ArgsValue<TypeName, FieldName>,
-  context: GetGen<"context">,
-  info: GraphQLResolveInfo
-) => ValidatorTree<TypeName, FieldName>;
+> = Resolver<TypeName, FieldName, ValidatorTree<TypeName, FieldName>>;
 
 export type TransformResolver<
   TypeName extends string,
   FieldName extends string
-> = (
-  root: SourceValue<TypeName>,
-  args: ArgsValue<TypeName, FieldName>,
-  context: GetGen<"context">,
-  info: GraphQLResolveInfo
-) => TransformerTree<TypeName, FieldName>;
+> = Resolver<TypeName, FieldName, TransformerTree<TypeName, FieldName>>;
 
 export interface ArgsValidatorPluginConfig {
   onValidationError: (errorsTree: ErrorsTree) => void;
@@ -173,8 +165,11 @@ export const argsValidatorPlugin = ({
     ],
 
     onCreateFieldResolver(config) {
-      const validate = config.fieldConfig.extensions?.nexus?.config.validate;
-      const transform = config.fieldConfig.extensions?.nexus?.config.transform;
+      const validate: ValidateResolver<string, string> =
+        config.fieldConfig.extensions?.nexus?.config.validate;
+
+      const transform: TransformResolver<string, string> =
+        config.fieldConfig.extensions?.nexus?.config.transform;
 
       // If both fields don't exist, our work is done here
       if (validate === null && transform === null) {
@@ -198,11 +193,12 @@ export const argsValidatorPlugin = ({
         return;
       }
 
-      return (root, args, ctx, info, next) => {
-        const transformedArgsOrPromise =
-          args && transform
-            ? applyTransforms(args, transform(root, args, ctx, info))
-            : args;
+      return (root, args: GeneralArgsValue | undefined, ctx, info, next) => {
+        if (!args) return next(root, args, ctx, info);
+
+        const transformedArgsOrPromise = transform
+          ? applyTransforms(args, transform(root, args, ctx, info))
+          : args;
 
         return completeValue(transformedArgsOrPromise, (transformedArgs) => {
           if (validate) {
@@ -228,7 +224,7 @@ export const argsValidatorPlugin = ({
 
 function findErrors(
   args: GeneralArgsValue,
-  validatorTree: ValidatorTree<"", "">
+  validatorTree: ValidatorTree<string, string>
 ): MaybePromise<MaybeErrorsTree> {
   return execute<unknown, ValidationResult>(
     args,
@@ -329,13 +325,12 @@ type ExecutionResultTree = { [key: string]: any };
 type MaybeExecutionResultTree = ExecutionResultTree | null;
 
 /**
- * @param resultAssignCondition if defined the returned tree will only be part of args struture, used with validators
+ * @param resultAssignCondition if defined the returned tree will only be part of args structure, used with validators
  * to only include the args with errors
  */
 function execute<T, R>(
   args: GeneralArgsValue,
   executorTree: ExecutorTree<R>,
-
   combineExecutors: (executors: Executor<T, R>[]) => Executor<T, R>,
   resultAssignCondition?: ResultAssignCondition<R>
 ): MaybePromise<MaybeExecutionResultTree> {
@@ -361,7 +356,7 @@ function execute<T, R>(
       for (let i = 0; i < results.length; i++) {
         const result = results[i];
 
-        // We only ever need to do anything if resultAssignConditon is undefined or when it evaluates to true
+        // We only ever need to do anything if resultAssignCondition is undefined or when it evaluates to true
         if (!resultAssignCondition || resultAssignCondition(result)) {
           if (!maybeExecutionResultTree) {
             maybeExecutionResultTree = {};
@@ -426,7 +421,7 @@ function executeHelper<T, R>(
         asyncExecutors.push(resultOrPromise);
         asyncExecutorsAccessKeys.push([...accessKey]);
       } else {
-        // We only ever need to do anything if resultAssignConditon is undefined or when it evaluates to true
+        // We only ever need to do anything if resultAssignCondition is undefined or when it evaluates to true
         if (!resultAssignCondition || resultAssignCondition(resultOrPromise)) {
           if (!maybeExecutionResultTree) {
             maybeExecutionResultTree = {};
@@ -435,25 +430,37 @@ function executeHelper<T, R>(
         }
       }
     } else if (typeof executorOrExecutorTree !== "undefined") {
-      // This is nested tree of executors, we need to recursively traverse the tree
-      const maybeExecutionResultTreeBranch = executeHelper(
-        args[key],
-        executorOrExecutorTree,
+      const arg = args[key];
 
-        [...accessKey],
+      if (arg) {
+        // This is nested tree of executors, we need to recursively traverse the tree
+        const maybeExecutionResultTreeBranch = executeHelper(
+          args[key],
+          executorOrExecutorTree,
 
-        asyncExecutors,
-        asyncExecutorsAccessKeys,
+          [...accessKey],
 
-        combineExecutors,
-        resultAssignCondition
-      );
+          asyncExecutors,
+          asyncExecutorsAccessKeys,
 
-      if (maybeExecutionResultTreeBranch) {
-        if (!maybeExecutionResultTree) {
-          maybeExecutionResultTree = {};
+          combineExecutors,
+          resultAssignCondition
+        );
+
+        if (maybeExecutionResultTreeBranch) {
+          if (!maybeExecutionResultTree) {
+            maybeExecutionResultTree = {};
+          }
+          maybeExecutionResultTree[key] = maybeExecutionResultTreeBranch;
         }
-        maybeExecutionResultTree[key] = maybeExecutionResultTreeBranch;
+      } else {
+        // We only ever need to do anything if resultAssignCondition is undefined or when it evaluates to true
+        if (!resultAssignCondition || resultAssignCondition(arg)) {
+          if (!maybeExecutionResultTree) {
+            maybeExecutionResultTree = {};
+          }
+          maybeExecutionResultTree[key] = arg;
+        }
       }
     }
   }
