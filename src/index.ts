@@ -126,6 +126,20 @@ export type TransformResolver<
 > = Resolver<TypeName, FieldName, TransformerTree<TypeName, FieldName>>;
 
 export interface ArgsValidatorPluginConfig {
+  /**
+   * This is where you handle the validation errors.
+   * Mostly you will be throwing an error containing `errorsTree`. e.g.
+   * ```
+    throw new ApolloError(
+          "One or more arguments failed validation",
+          "VALIDATION_FAILED",
+          {
+            validationErrors: errorsTree,
+          }
+    );
+   * ```
+   * @param errorsTree - an object containing the fields that failed validation. the key is the field name, the value is the error code
+   */
   onValidationError: (errorsTree: ErrorsTree) => void;
 }
 
@@ -236,7 +250,7 @@ function findErrors(
 
 function applyTransforms(
   args: GeneralArgsValue,
-  transformerTree: TransformerTree<"", "">
+  transformerTree: TransformerTree<string, string>
 ): MaybePromise<GeneralArgsValue> {
   // Guaranteed not to be null because it takes same form as args which shouldn't be null;
   return execute<unknown, unknown>(args, transformerTree, combineTransformers)!;
@@ -454,8 +468,7 @@ function executeHelper<T, R>(
           maybeExecutionResultTree[key] = maybeExecutionResultTreeBranch;
         }
       } else {
-        // We only ever need to do anything if resultAssignCondition is undefined or when it evaluates to true
-        if (!resultAssignCondition || resultAssignCondition(arg)) {
+        if (!resultAssignCondition) {
           if (!maybeExecutionResultTree) {
             maybeExecutionResultTree = {};
           }
