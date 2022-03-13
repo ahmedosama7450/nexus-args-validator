@@ -1,197 +1,207 @@
-import { ArgsValue, isPromiseLike, MaybePromise } from "nexus/dist/core";
+import { isPromiseLike, MaybePromise } from "nexus/dist/core";
 
-import { GeneralArgsValue } from "./types";
+import { MaybeNull, TraversableObject } from "./types";
 
 export function assignObjectAt(
-  obj: object,
+  obj: TraversableObject,
   accessKey: readonly string[],
   value: any
 ) {
-  let objBranch: any = obj;
   const lastKeyPartIndex = accessKey.length - 1;
 
   for (let i = 0; i < lastKeyPartIndex; i++) {
     const keyPart = accessKey[i];
-    if (!objBranch[keyPart]) {
-      objBranch[keyPart] = {};
+    if (!obj[keyPart]) {
+      obj[keyPart] = {};
     }
-    objBranch = objBranch[keyPart];
+    obj = obj[keyPart];
   }
 
-  objBranch[accessKey[lastKeyPartIndex]] = value;
+  obj[accessKey[lastKeyPartIndex]] = value;
 }
 
 /**
- * Could be a validator or transformer.
- *
- * `T` is arg type
- *
- * `R` is what is return, It' ValidationResult in case of validators, T in case of transformers
+ * Note: null is returned instead of returning an empty object except if {@link initialValue is the empty object}
  */
-type Executor<T, R> = (arg: T) => MaybePromise<R>;
+export function mapObject(
+  /** Could be object or array */
+  obj: TraversableObject,
 
-type BaseExecutorTree<Args extends ArgsValue<string, string>, R> = {
-  [key in keyof Args]?: Args[key] extends
-    | { [key: string]: any }
-    | null
-    | undefined
-    ?
-        | BaseExecutorTree<Args[key], R>
-        | Executor<Args[key], R>
-        | Executor<Args[key], R>[]
-    : Executor<Args[key], R> | Executor<Args[key], R>[];
-};
+  /**
+   * Note: Returned promises are collected and resolved all at once
+   */
+  mapValue: (value: any, relatedValue: any) => any,
 
-type ExecutorTree<R> = BaseExecutorTree<ArgsValue<string, string>, R>;
+  options: {
+    /**
+     * If an object is provided, It gets merged with the result object
+     * (Similar keys are overwritten by the result object)
+     */
+    initialValue?: MaybeNull<TraversableObject>;
 
-type ResultAssignCondition<R> = (result: R) => boolean;
+    /**
+     * If provided, It will be traversed and the corresponding value will be passed {@link mapValue}
+     */
+    relatedObj?: MaybeNull<TraversableObject>;
 
-/**
- * Could be ErrorsTree in case of validators, args in case of transformers
- */
-type ExecutionResultTree = { [key: string]: any };
+    /**
+     * If the provided value is equal to the returned value from {@link mapValue} function, The field (key-value pair) is not included in the returned object
+     * (Only works if value other than undefined is passed)
+     */
+    skipValueCondition?: (mappedValue: any) => boolean;
 
-type MaybeExecutionResultTree = ExecutionResultTree | null;
+    /**
+     * Skip traversal of a nested object of {@link obj}
+     */
+    skipBranchCondition?: (
+      branchObj: TraversableObject,
+      relatedValue: any
+    ) => boolean;
+  } = { initialValue: null, relatedObj: null }
+): MaybePromise<MaybeNull<TraversableObject>> {
+  const promises: PromiseLike<any>[] = [];
+  const promisesAccessKeys: string[][] = [];
 
-/**
- * @param resultAssignCondition if defined the returned tree will only be part of args structure, used with validators
- * to only include the args with errors
- */
-export function execute<T, R>(
-  args: GeneralArgsValue,
-  executorTree: ExecutorTree<R>,
-  combineExecutors: (executors: Executor<T, R>[]) => Executor<T, R>,
-  resultAssignCondition?: ResultAssignCondition<R>
-): MaybePromise<MaybeExecutionResultTree> {
-  const asyncExecutors: PromiseLike<R>[] = [];
-  const asyncExecutorsAccessKeys: string[][] = [];
+  const {
+    initialValue = null,
+    relatedObj = null,
+    skipValueCondition,
+    skipBranchCondition,
+  } = options;
 
-  let maybeExecutionResultTree = executeHelper<T, R>(
-    args,
-    executorTree,
-
+  let resultObj = mapObjectHelper(
     [],
-
-    asyncExecutors,
-    asyncExecutorsAccessKeys,
-
-    combineExecutors,
-    resultAssignCondition
+    promises,
+    promisesAccessKeys,
+    obj,
+    mapValue,
+    initialValue,
+    relatedObj,
+    skipValueCondition,
+    skipBranchCondition
   );
 
-  if (asyncExecutors.length !== 0) {
-    // Alright, we have async stuff that needs to be resolved and appended to the execution result tree
-    return Promise.all(asyncExecutors).then((results) => {
-      for (let i = 0; i < results.length; i++) {
-        const result = results[i];
+  if (promises.length !== 0) {
+    // Alright, we have promises that need to be resolved and appended to the result object
+    return Promise.all(promises).then((newValues) => {
+      for (let i = 0; i < newValues.length; i++) {
+        const newValue = newValues[i];
 
-        // We only ever need to do anything if resultAssignCondition is undefined or when it evaluates to true
-        if (!resultAssignCondition || resultAssignCondition(result)) {
-          if (!maybeExecutionResultTree) {
-            maybeExecutionResultTree = {};
+        if (!skipValueCondition || !skipValueCondition(newValue)) {
+          if (!resultObj) {
+            resultObj = {};
           }
-
-          assignObjectAt(
-            maybeExecutionResultTree,
-            asyncExecutorsAccessKeys[i],
-            result
-          );
+          assignObjectAt(resultObj, promisesAccessKeys[i], newValue);
         }
       }
 
-      return maybeExecutionResultTree;
+      return resultObj;
     });
   }
 
-  return maybeExecutionResultTree;
+  return resultObj;
 }
 
-function executeHelper<T, R>(
-  args: GeneralArgsValue,
-  executorTree: ExecutorTree<R>,
+function mapObjectHelper(
+  currentAccessKey: string[],
+  promises: PromiseLike<any>[],
+  promisesAccessKeys: string[][],
 
-  accessKey: string[],
+  obj: TraversableObject,
+  mapValue: (value: any, relatedValue: any) => any,
 
-  asyncExecutors: PromiseLike<R>[],
-  asyncExecutorsAccessKeys: string[][],
+  initialValue: MaybeNull<TraversableObject>,
+  relatedObj: MaybeNull<TraversableObject>,
+  skipValueCondition?: (mappedValue: any) => boolean,
+  skipBranchCondition?: (
+    branchObj: TraversableObject,
+    relatedValue: any
+  ) => boolean
+): MaybeNull<TraversableObject> {
+  let resultObj = initialValue;
 
-  combineExecutors: (executors: Executor<T, R>[]) => Executor<T, R>,
-  resultAssignCondition?: ResultAssignCondition<R>
-): MaybeExecutionResultTree {
-  // We only pick the fields that satisfy the condition or the result is null if none satisfies
-  let maybeExecutionResultTree: MaybeExecutionResultTree = resultAssignCondition
-    ? null
-    : args;
+  const keys = Object.keys(obj);
 
-  const executorTreeKeys = Object.keys(executorTree);
-
-  if (executorTreeKeys.length !== 0) {
-    accessKey.push("");
+  if (keys.length !== 0) {
+    currentAccessKey.push("");
   }
 
-  for (const key of executorTreeKeys) {
-    const executorOrExecutorTree = executorTree[key];
+  for (const key of keys) {
+    const value = obj[key];
+    const relatedValue = relatedObj ? relatedObj[key] : relatedObj;
 
-    accessKey[accessKey.length - 1] = key;
+    currentAccessKey[currentAccessKey.length - 1] = key;
 
-    if (
-      typeof executorOrExecutorTree === "function" ||
-      Array.isArray(executorOrExecutorTree)
-    ) {
-      // This is indeed an executor or array of executors
-      let resultOrPromise;
-      if (Array.isArray(executorOrExecutorTree)) {
-        resultOrPromise = combineExecutors(executorOrExecutorTree)(args[key]);
-      } else {
-        resultOrPromise = executorOrExecutorTree(args[key]);
-      }
-
-      if (isPromiseLike(resultOrPromise)) {
-        asyncExecutors.push(resultOrPromise);
-        asyncExecutorsAccessKeys.push([...accessKey]);
-      } else {
-        // We only ever need to do anything if resultAssignCondition is undefined or when it evaluates to true
-        if (!resultAssignCondition || resultAssignCondition(resultOrPromise)) {
-          if (!maybeExecutionResultTree) {
-            maybeExecutionResultTree = {};
-          }
-          maybeExecutionResultTree[key] = resultOrPromise;
-        }
-      }
-    } else if (typeof executorOrExecutorTree !== "undefined") {
-      const arg = args[key];
-
-      if (arg) {
-        // This is nested tree of executors, we need to recursively traverse the tree
-        const maybeExecutionResultTreeBranch = executeHelper(
-          args[key],
-          executorOrExecutorTree,
-
-          [...accessKey],
-
-          asyncExecutors,
-          asyncExecutorsAccessKeys,
-
-          combineExecutors,
-          resultAssignCondition
+    if (type(value) === "object") {
+      if (!skipBranchCondition || !skipBranchCondition(value, relatedValue)) {
+        const branch = mapObjectHelper(
+          [...currentAccessKey],
+          promises,
+          promisesAccessKeys,
+          value,
+          mapValue,
+          initialValue ? initialValue[key] : initialValue,
+          relatedValue,
+          skipValueCondition,
+          skipBranchCondition
         );
 
-        if (maybeExecutionResultTreeBranch) {
-          if (!maybeExecutionResultTree) {
-            maybeExecutionResultTree = {};
+        if (branch) {
+          if (!resultObj) {
+            resultObj = {};
           }
-          maybeExecutionResultTree[key] = maybeExecutionResultTreeBranch;
+          resultObj[key] = branch;
         }
-      } else {
-        if (!resultAssignCondition) {
-          if (!maybeExecutionResultTree) {
-            maybeExecutionResultTree = {};
-          }
-          maybeExecutionResultTree[key] = arg;
+      }
+    } else {
+      const newValueOrPromise = mapValue(value, relatedValue);
+
+      if (isPromiseLike(newValueOrPromise)) {
+        promises.push(newValueOrPromise);
+        promisesAccessKeys.push([...currentAccessKey]);
+      } else if (
+        !skipValueCondition ||
+        !skipValueCondition(newValueOrPromise)
+      ) {
+        if (!resultObj) {
+          resultObj = {};
         }
+        resultObj[key] = newValueOrPromise;
       }
     }
   }
 
-  return maybeExecutionResultTree;
+  return resultObj;
+}
+
+// TODO type guards
+/**
+ * More specific version of typeof. e.g. It handles null, arrays, regexp, date...
+ * Copied from {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/typeof#real-world_usage}
+ */
+export function type(obj: any, showFullClass: boolean = false): string {
+  // get toPrototypeString() of obj (handles all types)
+  if (showFullClass && typeof obj === "object") {
+    return Object.prototype.toString.call(obj);
+  }
+  if (obj == null) {
+    return (obj + "").toLowerCase();
+  } // implicit toString() conversion
+
+  var deepType = Object.prototype.toString.call(obj).slice(8, -1).toLowerCase();
+  if (deepType === "generatorfunction") {
+    return "function";
+  }
+
+  // Prevent overspecificity (for example, [object HTMLDivElement], etc).
+  // Account for functionish Regexp (Android <=2.3), functionish <object> element (Chrome <=57, Firefox <=52), etc.
+  // String.prototype.match is universally supported.
+
+  return deepType.match(
+    /^(array|bigint|date|error|function|generator|regexp|symbol)$/
+  )
+    ? deepType
+    : typeof obj === "object" || typeof obj === "function"
+    ? "object"
+    : typeof obj;
 }

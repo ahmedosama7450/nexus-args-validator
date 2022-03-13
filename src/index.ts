@@ -9,8 +9,8 @@ import {
 } from "nexus/dist/core";
 import { join } from "path";
 
-import { execute } from "./utils";
-import { GeneralArgsValue, Resolver } from "./types";
+import { mapObject, type } from "./utils";
+import { MaybeNull, Resolver, TraversableObject } from "./types";
 
 /**
  * undefined means validation passed
@@ -31,8 +31,6 @@ export type ErrorValidationResultExtras = {
 export type ErrorsTree = {
   [key: string]: ErrorValidationResult | ErrorsTree;
 };
-
-export type MaybeErrorsTree = ErrorsTree | null;
 
 export type Validator<T> = (arg: T) => MaybePromise<ValidationResult>;
 
@@ -99,6 +97,8 @@ export type TransformResolver<
   TypeName extends string,
   FieldName extends string
 > = Resolver<TypeName, FieldName, TransformerTree<TypeName, FieldName>>;
+
+export type GeneralArgsValue = TraversableObject;
 
 export interface ArgsValidatorPluginConfig {
   /**
@@ -214,12 +214,25 @@ export const argsValidatorPlugin = ({
 function findErrors(
   args: GeneralArgsValue,
   validatorTree: ValidatorTree<string, string>
-): MaybePromise<MaybeErrorsTree> {
-  return execute<unknown, ValidationResult>(
-    args,
+): MaybePromise<MaybeNull<ErrorsTree>> {
+  return mapObject(
     validatorTree,
-    combineValidators,
-    (result) => result != undefined
+    (value, relatedValue) => {
+      const valueType = type(value);
+
+      if (valueType === "array") {
+        return combineValidators(value)(relatedValue);
+      } else if (valueType === "function") {
+        return value(relatedValue);
+      }
+
+      return value;
+    },
+    {
+      relatedObj: args,
+      skipValueCondition: (mappedValue) => mappedValue === undefined,
+      skipBranchCondition: (_, relatedValue) => !relatedValue,
+    }
   );
 }
 
@@ -227,8 +240,25 @@ function applyTransforms(
   args: GeneralArgsValue,
   transformerTree: TransformerTree<string, string>
 ): MaybePromise<GeneralArgsValue> {
-  // Guaranteed not to be null because it takes same form as args which shouldn't be null;
-  return execute<unknown, unknown>(args, transformerTree, combineTransformers)!;
+  return mapObject(
+    transformerTree,
+    (value, relatedValue) => {
+      const valueType = type(value);
+
+      if (valueType === "array") {
+        return combineTransformers(value)(relatedValue);
+      } else if (valueType === "function") {
+        return value(relatedValue);
+      }
+
+      return value;
+    },
+    {
+      initialValue: args,
+      relatedObj: args,
+      skipBranchCondition: (_, relatedValue) => !relatedValue,
+    }
+  )!; // Guaranteed not to be null because the result should at least be initialValue which is not null
 }
 
 export function combineValidators<T>(validators: Validator<T>[]): Validator<T> {

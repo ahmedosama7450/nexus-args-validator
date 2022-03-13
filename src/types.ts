@@ -5,7 +5,7 @@ export type MaybeNullable<T> = T | null | undefined;
 
 export type MaybeNull<T> = T | null;
 
-export type GeneralArgsValue = { [key: string]: any };
+export type TraversableObject = Record<string, any>;
 
 export type Resolver<
   TypeName extends string,
