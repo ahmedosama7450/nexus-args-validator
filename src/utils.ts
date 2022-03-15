@@ -9,19 +9,23 @@ export function assignObjectAt(
 ) {
   const lastKeyPartIndex = accessKey.length - 1;
 
+  let currentObj = obj;
+
   for (let i = 0; i < lastKeyPartIndex; i++) {
     const keyPart = accessKey[i];
-    if (!obj[keyPart]) {
-      obj[keyPart] = {};
+    if (!currentObj[keyPart]) {
+      currentObj[keyPart] = {};
     }
-    obj = obj[keyPart];
+    currentObj = currentObj[keyPart];
   }
 
-  obj[accessKey[lastKeyPartIndex]] = value;
+  currentObj[accessKey[lastKeyPartIndex]] = value;
+
+  return obj;
 }
 
 /**
- * Note: null is returned instead of returning an empty object except if {@link initialValue is the empty object}
+ * Note: null is returned instead of returning an empty object except if {@link initialValue} is the empty object
  */
 export function mapObject(
   /** Could be object or array */
@@ -40,12 +44,20 @@ export function mapObject(
     initialValue?: MaybeNull<TraversableObject>;
 
     /**
-     * If provided, It will be traversed and the corresponding value will be passed {@link mapValue}
+     * If provided, It will be traversed and the corresponding value will be passed {@link options.mapValue}
      */
     relatedObj?: MaybeNull<TraversableObject>;
 
     /**
-     * If the provided value is equal to the returned value from {@link mapValue} function, The field (key-value pair) is not included in the returned object
+     * Once the field that satisfies condition is found,
+     * the object traversal is stopped which means that the result object will consist of only one field.
+     *
+     * Note: {@link options.initialValue} will have no effect on the result object
+     */
+    searchFor?: (mappedValue: any) => boolean;
+
+    /**
+     * If the provided value is equal to the returned value from {@link options.mapValue} function, The field (key-value pair) is not included in the returned object
      * (Only works if value other than undefined is passed)
      */
     skipValueCondition?: (mappedValue: any) => boolean;
@@ -65,41 +77,57 @@ export function mapObject(
   const {
     initialValue = null,
     relatedObj = null,
+    searchFor,
     skipValueCondition,
     skipBranchCondition,
   } = options;
 
-  let resultObj = mapObjectHelper(
-    [],
-    promises,
-    promisesAccessKeys,
-    obj,
-    mapValue,
-    initialValue,
-    relatedObj,
-    skipValueCondition,
-    skipBranchCondition
-  );
+  try {
+    let resultObj = mapObjectHelper(
+      [],
+      promises,
+      promisesAccessKeys,
+      obj,
+      mapValue,
+      initialValue,
+      relatedObj,
+      searchFor,
+      skipValueCondition,
+      skipBranchCondition
+    );
 
-  if (promises.length !== 0) {
-    // Alright, we have promises that need to be resolved and appended to the result object
-    return Promise.all(promises).then((newValues) => {
-      for (let i = 0; i < newValues.length; i++) {
-        const newValue = newValues[i];
+    if (promises.length !== 0) {
+      // Alright, we have promises that need to be resolved and appended to the result object
+      return Promise.all(promises).then((mappedValues) => {
+        for (let i = 0; i < mappedValues.length; i++) {
+          const mappedValue = mappedValues[i];
 
-        if (!skipValueCondition || !skipValueCondition(newValue)) {
-          if (!resultObj) {
-            resultObj = {};
+          if (!skipValueCondition || !skipValueCondition(mappedValue)) {
+            if (searchFor) {
+              if (searchFor(mappedValues)) {
+                return assignObjectAt({}, promisesAccessKeys[i], mappedValue);
+              }
+            } else {
+              if (!resultObj) {
+                resultObj = {};
+              }
+              assignObjectAt(resultObj, promisesAccessKeys[i], mappedValue);
+            }
           }
-          assignObjectAt(resultObj, promisesAccessKeys[i], newValue);
         }
-      }
 
-      return resultObj;
-    });
+        return resultObj;
+      });
+    }
+
+    return resultObj;
+  } catch (e) {
+    if (Array.isArray(e) && e[0] === "abort-early") {
+      return e[1];
+    }
+
+    throw e;
   }
-
-  return resultObj;
 }
 
 function mapObjectHelper(
@@ -112,6 +140,7 @@ function mapObjectHelper(
 
   initialValue: MaybeNull<TraversableObject>,
   relatedObj: MaybeNull<TraversableObject>,
+  searchFor?: (mappedValue: any) => boolean,
   skipValueCondition?: (mappedValue: any) => boolean,
   skipBranchCondition?: (
     branchObj: TraversableObject,
@@ -142,6 +171,7 @@ function mapObjectHelper(
           mapValue,
           initialValue ? initialValue[key] : initialValue,
           relatedValue,
+          searchFor,
           skipValueCondition,
           skipBranchCondition
         );
@@ -154,19 +184,28 @@ function mapObjectHelper(
         }
       }
     } else {
-      const newValueOrPromise = mapValue(value, relatedValue);
+      const mappedValueOrPromise = mapValue(value, relatedValue);
 
-      if (isPromiseLike(newValueOrPromise)) {
-        promises.push(newValueOrPromise);
+      if (isPromiseLike(mappedValueOrPromise)) {
+        promises.push(mappedValueOrPromise);
         promisesAccessKeys.push([...currentAccessKey]);
       } else if (
         !skipValueCondition ||
-        !skipValueCondition(newValueOrPromise)
+        !skipValueCondition(mappedValueOrPromise)
       ) {
-        if (!resultObj) {
-          resultObj = {};
+        if (searchFor) {
+          if (searchFor(mappedValueOrPromise)) {
+            throw [
+              "abort-early",
+              assignObjectAt({}, currentAccessKey, mappedValueOrPromise),
+            ]; // Break out of recursion
+          }
+        } else {
+          if (!resultObj) {
+            resultObj = {};
+          }
+          resultObj[key] = mappedValueOrPromise;
         }
-        resultObj[key] = newValueOrPromise;
       }
     }
   }
@@ -174,7 +213,7 @@ function mapObjectHelper(
   return resultObj;
 }
 
-// TODO type guards
+// TODO Enhance type safety including type guards
 /**
  * More specific version of typeof. e.g. It handles null, arrays, regexp, date...
  * Copied from {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/typeof#real-world_usage}

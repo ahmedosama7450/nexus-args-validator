@@ -116,10 +116,17 @@ export interface ArgsValidatorPluginConfig {
    * @param errorsTree - an object containing the fields that failed validation. the key is the field name, the value is the error code
    */
   onValidationError: (errorsTree: ErrorsTree) => void;
+
+  /**
+   * Stop once a validation error is found.
+   * This means that errorsTree passed to {@link onValidationError} will consist if only one field
+   */
+  abortEarly?: boolean;
 }
 
 export const argsValidatorPlugin = ({
   onValidationError,
+  abortEarly = false,
 }: ArgsValidatorPluginConfig) =>
   plugin({
     name: "Args Validator / Transformer plugin",
@@ -193,7 +200,8 @@ export const argsValidatorPlugin = ({
           if (validate) {
             const errorsTreeOrPromise = findErrors(
               transformedArgs,
-              validate(root, transformedArgs, ctx, info)
+              validate(root, transformedArgs, ctx, info),
+              abortEarly
             );
 
             return completeValue(errorsTreeOrPromise, (errorsTree) => {
@@ -213,7 +221,8 @@ export const argsValidatorPlugin = ({
 
 function findErrors(
   args: GeneralArgsValue,
-  validatorTree: ValidatorTree<string, string>
+  validatorTree: ValidatorTree<string, string>,
+  abortEarly: boolean
 ): MaybePromise<MaybeNull<ErrorsTree>> {
   return mapObject(
     validatorTree,
@@ -232,6 +241,9 @@ function findErrors(
       relatedObj: args,
       skipValueCondition: (mappedValue) => mappedValue === undefined,
       skipBranchCondition: (_, relatedValue) => !relatedValue,
+      searchFor: abortEarly
+        ? (mappedValue) => mappedValue !== undefined
+        : undefined,
     }
   );
 }
