@@ -5,12 +5,13 @@ import {
   MaybePromise,
   printedGenTyping,
   printedGenTypingImport,
-  isPromiseLike,
 } from "nexus/dist/core";
 import { join } from "path";
 
 import { mapObject, type } from "./utils";
 import { MaybeNull, Resolver, TraversableObject } from "./types";
+import { combineTransformers } from "./transformers";
+import { andValidators } from "./validators";
 
 /**
  * undefined means validation passed
@@ -22,7 +23,11 @@ export type ValidationResult = ErrorValidationResult | undefined;
  *
  * Second element represents any extras related to validation
  */
-export type ErrorValidationResult = [string, ErrorValidationResultExtras];
+export type ErrorValidationResult =
+  | BaseErrorValidationResult
+  | ErrorValidationResult[];
+
+export type BaseErrorValidationResult = [string, ErrorValidationResultExtras];
 
 export type ErrorValidationResultExtras = {
   [key: string]: number | string | boolean;
@@ -226,16 +231,16 @@ function findErrors(
 ): MaybePromise<MaybeNull<ErrorsTree>> {
   return mapObject(
     validatorTree,
-    (value, relatedValue) => {
-      const valueType = type(value);
+    (validator, arg) => {
+      const valueType = type(validator);
 
       if (valueType === "array") {
-        return combineValidators(value)(relatedValue);
+        return andValidators(validator)(arg);
       } else if (valueType === "function") {
-        return value(relatedValue);
+        return validator(arg);
       }
 
-      return value;
+      return validator;
     },
     {
       relatedObj: args,
@@ -254,16 +259,16 @@ function applyTransforms(
 ): MaybePromise<GeneralArgsValue> {
   return mapObject(
     transformerTree,
-    (value, relatedValue) => {
-      const valueType = type(value);
+    (transformer, arg) => {
+      const valueType = type(transformer);
 
       if (valueType === "array") {
-        return combineTransformers(value)(relatedValue);
+        return combineTransformers(transformer)(arg);
       } else if (valueType === "function") {
-        return value(relatedValue);
+        return transformer(arg);
       }
 
-      return value;
+      return transformer;
     },
     {
       initialValue: args,
@@ -271,77 +276,4 @@ function applyTransforms(
       skipBranchCondition: (_, relatedValue) => !relatedValue,
     }
   )!; // Guaranteed not to be null because the result should at least be initialValue which is not null
-}
-
-export function combineValidators<T>(validators: Validator<T>[]): Validator<T> {
-  return (arg) => {
-    for (let i = 0; i < validators.length; i++) {
-      const validationResultOrPromise = validators[i](arg);
-
-      if (isPromiseLike(validationResultOrPromise)) {
-        // Now, We can return a promise
-        return Promise.all(
-          validators.reduce(
-            (acc, currentValidator, curIndex) => {
-              if (curIndex > i) {
-                acc.push(currentValidator(arg));
-              }
-
-              return acc;
-            },
-            [validationResultOrPromise] as MaybePromise<ValidationResult>[]
-          )
-        ).then((validationResults) => {
-          for (const validationResult of validationResults) {
-            if (validationResult != undefined) {
-              return validationResult;
-            }
-          }
-          return undefined;
-        });
-      } else {
-        if (validationResultOrPromise !== undefined) {
-          return validationResultOrPromise;
-        }
-      }
-    }
-
-    return undefined;
-  };
-}
-
-export function combineTransformers<T>(
-  transformers: Transformer<T>[]
-): Transformer<T> {
-  return (arg) => {
-    let lastTransformedArg = arg;
-    for (let i = 0; i < transformers.length; i++) {
-      const transformedArgOrPromise = transformers[i](lastTransformedArg);
-
-      if (isPromiseLike(transformedArgOrPromise)) {
-        // Now, We can return a promise
-        return Promise.all(
-          transformers.reduce(
-            (acc, currentTransformer, curIndex) => {
-              if (curIndex > i) {
-                acc.push(currentTransformer(arg));
-              }
-
-              return acc;
-            },
-            [transformedArgOrPromise] as MaybePromise<T>[]
-          )
-        ).then((asyncTransformedArgs) => {
-          for (const transformedArg of asyncTransformedArgs) {
-            lastTransformedArg = transformedArg;
-          }
-          return lastTransformedArg;
-        });
-      } else {
-        lastTransformedArg = transformedArgOrPromise;
-      }
-    }
-
-    return lastTransformedArg;
-  };
 }

@@ -1,5 +1,19 @@
 import { MaybeNullable } from "./types";
+import { reduceAsync } from "./utils";
 import { Transformer } from ".";
+
+export function combineTransformers<T>(
+  transformers: [Transformer<T>, Transformer<T>, ...Transformer<T>[]]
+): Transformer<T> {
+  return (arg) => {
+    return reduceAsync(
+      transformers,
+      (acc, currentItem) => currentItem(acc),
+      (_, currentValue) => currentValue,
+      arg
+    );
+  };
+}
 
 //===================================
 // Unknowns

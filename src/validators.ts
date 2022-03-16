@@ -1,7 +1,12 @@
-import { MaybePromise } from "nexus/dist/core";
-import { MaybeNull, MaybeNullable } from "./types";
+import { isPromiseLike, MaybePromise } from "nexus/dist/core";
 
-import { ErrorValidationResultExtras, Validator } from ".";
+import { MaybeNull, MaybeNullable } from "./types";
+import {
+  ErrorValidationResult,
+  ErrorValidationResultExtras,
+  Validator,
+} from ".";
+import { reduceAsync } from "./utils";
 
 // TODO Maybe find a way to make sure that error codes are unique (e.g. make error code same as name as validator function)
 
@@ -54,6 +59,103 @@ export function defineValidator<T, S extends NullabilityStrategy = "normal">(
     } else {
       return undefined;
     }
+  };
+}
+
+/**
+ *
+ * @param newErrorResult If not provided, the original result is kept but error code string is prefixed with `not`
+ */
+export function notValidator<T>(
+  validator: Validator<T>,
+  newErrorResult: ErrorValidationResult
+): Validator<T> {
+  return (arg) => {
+    const validationResultOrPromise = validator(arg);
+
+    if (isPromiseLike(validationResultOrPromise)) {
+      return validationResultOrPromise.then((validatorResult) => {
+        if (validatorResult === undefined) {
+          return newErrorResult;
+        } else {
+          return undefined;
+        }
+      });
+    } else {
+      if (validationResultOrPromise === undefined) {
+        return newErrorResult;
+      } else {
+        return undefined;
+      }
+    }
+  };
+}
+
+export function orValidators<T>(
+  validators: [Validator<T>, Validator<T>, ...Validator<T>[]],
+  newErrorResult?: ErrorValidationResult
+): Validator<T> {
+  return (arg) => {
+    return reduceAsync(
+      validators,
+
+      (acc, validator, i) => validator(arg),
+
+      (acc, validationResult, i, returnEarly) => {
+        if (validationResult === undefined) {
+          returnEarly(undefined);
+        } else {
+          acc.push(validationResult);
+        }
+
+        return acc;
+      },
+
+      [] as ErrorValidationResult[],
+
+      (acc) => (acc.length === 0 ? undefined : newErrorResult || acc)
+    );
+  };
+}
+
+/**
+ * @param validators array of validators to be combined
+ *
+ * @param abortEarly If `true`, stop once a validation error is found.
+ * If `false`, the resultant validator, when called, will return an array of errors (if there is any).
+ *
+ * @param newErrorResult If provided,this is used instead of the errors collected by child validators
+ *
+ * @returns new validator where child validators all have to pass in order for the resultant validator to pass. (AND logic)
+ */
+export function andValidators<T>(
+  validators: [Validator<T>, Validator<T>, ...Validator<T>[]],
+  abortEarly: boolean = true,
+  newErrorResult?: ErrorValidationResult
+): Validator<T> {
+  return (arg) => {
+    return reduceAsync(
+      validators,
+
+      (acc, validator, i) => validator(arg),
+
+      (acc, validationResult, i, returnEarly) => {
+        if (validationResult != undefined) {
+          if (abortEarly) {
+            returnEarly(newErrorResult || validationResult);
+          } else {
+            if (newErrorResult) returnEarly(newErrorResult); // Saves us some time
+            acc.push(validationResult);
+          }
+        }
+
+        return acc;
+      },
+
+      [] as ErrorValidationResult[],
+
+      (acc) => (acc.length === 0 ? undefined : newErrorResult || acc)
+    );
   };
 }
 

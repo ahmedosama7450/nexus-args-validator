@@ -25,6 +25,63 @@ export function assignObjectAt(
 }
 
 /**
+ * Similar to array reduce, but the items passed to the reduce callback are the results of calling {@link evaluate} on the array items
+ * in which we deal with any returned promises.
+ */
+export function reduceAsync<T, K, U, E>(
+  array: T[],
+  evaluate: (acc: U, currentItem: T, currentIndex: number) => MaybePromise<K>,
+  callback: (
+    acc: U,
+    currentValue: K,
+    currentIndex: number,
+    returnEarly: (result: E) => void
+  ) => U,
+  initialValue: U,
+  manipulateReturn?: (acc: U) => MaybePromise<U | E>
+): MaybePromise<U | E> {
+  let acc = initialValue;
+
+  // TODO: I think I should do this differently
+  const earlyResult: { inner: { result: E } | null } = { inner: null };
+  const returnEarly = (result: E) => {
+    earlyResult.inner = { result };
+  };
+
+  for (let i = 0; i < array.length; i++) {
+    const valueOrPromise = evaluate(acc, array[i], i);
+
+    if (isPromiseLike(valueOrPromise)) {
+      // Now, We can return a promise
+      const restArrMaybePromises: MaybePromise<K>[] = [valueOrPromise];
+
+      for (let j = i + 1; j < array.length; j++) {
+        restArrMaybePromises[j - i - 1] = evaluate(acc, array[j], j);
+      }
+
+      return Promise.all(restArrMaybePromises).then((restArr) => {
+        for (let j = i; j < array.length; j++) {
+          acc = callback(acc, restArr[j - i], j, returnEarly);
+
+          if (earlyResult.inner) {
+            return earlyResult.inner.result;
+          }
+        }
+        return acc;
+      });
+    } else {
+      acc = callback(acc, valueOrPromise, i, returnEarly);
+
+      if (earlyResult.inner) {
+        return earlyResult.inner.result;
+      }
+    }
+  }
+
+  return manipulateReturn ? manipulateReturn(acc) : acc;
+}
+
+/**
  * Note: null is returned instead of returning an empty object except if {@link initialValue} is the empty object
  */
 export function mapObject(
