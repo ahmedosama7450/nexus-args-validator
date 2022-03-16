@@ -16,40 +16,30 @@ import { andValidators } from "./validators";
 /**
  * undefined means validation passed
  */
-export type ValidationResult = ErrorValidationResult | undefined;
+export type ValidationResult = ValidationResultError | undefined;
 
 /**
  * First element represents error code
  *
  * Second element represents any extras related to validation
  */
-export type ErrorValidationResult =
-  | BaseErrorValidationResult
-  | ErrorValidationResult[];
+export type ValidationResultError =
+  | BaseValidationResultError
+  | ValidationResultError[];
 
-export type BaseErrorValidationResult = [string, ErrorValidationResultExtras];
+export type BaseValidationResultError = [string, ValidationResultErrorExtras];
 
-export type ErrorValidationResultExtras = {
+export type ValidationResultErrorExtras = {
   [key: string]: number | string | boolean;
 } | null;
 
 export type ErrorsTree = {
-  [key: string]: ErrorValidationResult | ErrorsTree;
+  [key: string]: ValidationResultError | ErrorsTree;
 };
 
 export type Validator<T> = (arg: T) => MaybePromise<ValidationResult>;
 
 export type Transformer<T> = (arg: T) => MaybePromise<T>;
-
-/* type ArgsTreeValue<
-  key extends keyof Args,
-  T extends string,
-  F extends string,
-  E extends Function,
-  B,
-  Args extends ArgsValue<T, F>
-> = Args[key] extends { [key: string]: any } ? B : E | E[];
- */
 
 type BaseValidatorTree<
   T extends string,

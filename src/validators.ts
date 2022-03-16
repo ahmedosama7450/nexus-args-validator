@@ -2,8 +2,8 @@ import { isPromiseLike, MaybePromise } from "nexus/dist/core";
 
 import { MaybeNull, MaybeNullable } from "./types";
 import {
-  ErrorValidationResult,
-  ErrorValidationResultExtras,
+  ValidationResultError,
+  ValidationResultErrorExtras,
   Validator,
 } from ".";
 import { reduceAsync } from "./utils";
@@ -33,7 +33,7 @@ export function defineValidator<T, S extends NullabilityStrategy = "normal">(
       ? MaybeNullable<T>
       : MaybeNull<T>
   ) => MaybePromise<boolean>,
-  extras: ErrorValidationResultExtras = null,
+  extras: ValidationResultErrorExtras = null,
   takeErrorCondition: boolean = true,
   nullabilityStrategy?: S
 ): Validator<MaybeNullable<T>> {
@@ -64,11 +64,11 @@ export function defineValidator<T, S extends NullabilityStrategy = "normal">(
 
 /**
  *
- * @param newErrorResult If not provided, the original result is kept but error code string is prefixed with `not`
+ * @param error If not provided, the original result is kept but error code string is prefixed with `not`
  */
 export function notValidator<T>(
   validator: Validator<T>,
-  newErrorResult: ErrorValidationResult
+  error: ValidationResultError
 ): Validator<T> {
   return (arg) => {
     const validationResultOrPromise = validator(arg);
@@ -76,14 +76,14 @@ export function notValidator<T>(
     if (isPromiseLike(validationResultOrPromise)) {
       return validationResultOrPromise.then((validatorResult) => {
         if (validatorResult === undefined) {
-          return newErrorResult;
+          return error;
         } else {
           return undefined;
         }
       });
     } else {
       if (validationResultOrPromise === undefined) {
-        return newErrorResult;
+        return error;
       } else {
         return undefined;
       }
@@ -93,7 +93,7 @@ export function notValidator<T>(
 
 export function orValidators<T>(
   validators: [Validator<T>, Validator<T>, ...Validator<T>[]],
-  newErrorResult?: ErrorValidationResult
+  error?: ValidationResultError
 ): Validator<T> {
   return (arg) => {
     return reduceAsync(
@@ -111,9 +111,9 @@ export function orValidators<T>(
         return acc;
       },
 
-      [] as ErrorValidationResult[],
+      [] as ValidationResultError[],
 
-      (acc) => (acc.length === 0 ? undefined : newErrorResult || acc)
+      (acc) => (acc.length === 0 ? undefined : error || acc)
     );
   };
 }
@@ -124,14 +124,14 @@ export function orValidators<T>(
  * @param abortEarly If `true`, stop once a validation error is found.
  * If `false`, the resultant validator, when called, will return an array of errors (if there is any).
  *
- * @param newErrorResult If provided,this is used instead of the errors collected by child validators
+ * @param error If provided,this is used instead of the errors collected by child validators
  *
  * @returns new validator where child validators all have to pass in order for the resultant validator to pass. (AND logic)
  */
 export function andValidators<T>(
   validators: [Validator<T>, Validator<T>, ...Validator<T>[]],
   abortEarly: boolean = true,
-  newErrorResult?: ErrorValidationResult
+  error?: ValidationResultError
 ): Validator<T> {
   return (arg) => {
     return reduceAsync(
@@ -142,9 +142,9 @@ export function andValidators<T>(
       (acc, validationResult, i, returnEarly) => {
         if (validationResult != undefined) {
           if (abortEarly) {
-            returnEarly(newErrorResult || validationResult);
+            returnEarly(error || validationResult);
           } else {
-            if (newErrorResult) returnEarly(newErrorResult); // Saves us some time
+            if (error) returnEarly(error); // Saves us some time
             acc.push(validationResult);
           }
         }
@@ -152,9 +152,9 @@ export function andValidators<T>(
         return acc;
       },
 
-      [] as ErrorValidationResult[],
+      [] as ValidationResultError[],
 
-      (acc) => (acc.length === 0 ? undefined : newErrorResult || acc)
+      (acc) => (acc.length === 0 ? undefined : error || acc)
     );
   };
 }
