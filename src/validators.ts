@@ -8,8 +8,6 @@ import {
 } from ".";
 import { reduceAsync } from "./utils";
 
-// TODO Maybe find a way to make sure that error codes are unique (e.g. make error code same as name as validator function)
-
 /**
  * normal: (arg: T) -> validation passes in case of nullable (null/undefined)
  * strict: (arg: T | null | undefined) -> full control
@@ -18,7 +16,9 @@ import { reduceAsync } from "./utils";
 type NullabilityStrategy = "normal" | "strict" | "strict-with-null";
 
 /**
- * @param errorCode
+ * Utility to easily create validators
+ *
+ * @param errorCode to use when validation fails
  * @param errorOrPassCondition depends on takeErrorCondition. Return either if validation fails or passes
  * @param extras returned along with error code when validation fails
  * @param takeErrorCondition Deal with errorOrPassCondition function as error condition. Defaults to true
@@ -63,8 +63,8 @@ export function defineValidator<T, S extends NullabilityStrategy = "normal">(
 }
 
 /**
- *
- * @param error If not provided, the original result is kept but error code string is prefixed with `not`
+ * @returns a new validator that passes when the original validator fails
+ * and fails (with the given error) when the original validator passes
  */
 export function notValidator<T>(
   validator: Validator<T>,
@@ -91,6 +91,11 @@ export function notValidator<T>(
   };
 }
 
+/**
+ * @param error If provided, this is used instead of the errors collected by child validators
+ *
+ * @returns new validator where at least one of the child validators has to pass in order for the resultant validator to pass. (OR logic)
+ */
 export function orValidators<T>(
   validators: [Validator<T>, Validator<T>, ...Validator<T>[]],
   error?: ValidationResultError
@@ -99,9 +104,9 @@ export function orValidators<T>(
     return reduceAsync(
       validators,
 
-      (acc, validator, i) => validator(arg),
+      (_, validator) => validator(arg),
 
-      (acc, validationResult, i, returnEarly) => {
+      (acc, validationResult, _, returnEarly) => {
         if (validationResult === undefined) {
           returnEarly(undefined);
         } else {
@@ -119,12 +124,12 @@ export function orValidators<T>(
 }
 
 /**
- * @param validators array of validators to be combined
+ * @param abortEarly
+ * If `true`, Stop once a validation error is found (Short-circuit evaluation) which means the resultant
+ * validator, when called, will return only one error (in case validation fails).
+ * If `false`, the resultant validator, when called, will return an array of errors (in case validation fails).
  *
- * @param abortEarly If `true`, stop once a validation error is found.
- * If `false`, the resultant validator, when called, will return an array of errors (if there is any).
- *
- * @param error If provided,this is used instead of the errors collected by child validators
+ * @param error If provided, this is used instead of the errors collected by child validators
  *
  * @returns new validator where child validators all have to pass in order for the resultant validator to pass. (AND logic)
  */
@@ -137,9 +142,9 @@ export function andValidators<T>(
     return reduceAsync(
       validators,
 
-      (acc, validator, i) => validator(arg),
+      (_, validator, __) => validator(arg),
 
-      (acc, validationResult, i, returnEarly) => {
+      (acc, validationResult, _, returnEarly) => {
         if (validationResult != undefined) {
           if (abortEarly) {
             returnEarly(error || validationResult);
@@ -163,15 +168,28 @@ export function andValidators<T>(
 // Numbers
 //===================================
 
-export const max = (n: number) =>
-  defineValidator<number>("max", (arg) => arg > n, { n });
+/**
+ * @returns number validator that fails when the number arg is above {@link n}
+ */
+export const max = (n: number, errorCode: string = "max") =>
+  defineValidator<number>(errorCode, (arg) => arg > n, { n });
 
-export const min = (n: number) =>
-  defineValidator<number>("min", (arg) => arg < n, { n });
+/**
+ * @returns number validator that fails when the number arg is below {@link n}
+ */
+export const min = (n: number, errorCode: string = "min") =>
+  defineValidator<number>(errorCode, (arg) => arg < n, { n });
 
-export const range = (lowerBound: number, upperBound: number) =>
+/**
+ * @returns number validator that fails when the number arg is not within the range [{@link lowerBound}, {@link upperBound}]
+ */
+export const range = (
+  lowerBound: number,
+  upperBound: number,
+  errorCode: string = "range"
+) =>
   defineValidator<number>(
-    "range",
+    errorCode,
     (arg) => arg < lowerBound || arg > upperBound,
     { lowerBound, upperBound }
   );
@@ -180,43 +198,46 @@ export const range = (lowerBound: number, upperBound: number) =>
 // Arrays
 //===================================
 
-export const maxSize = (n: number) =>
-  defineValidator<[] | string>("max-size", (arg) => arg.length > n, { n });
+/**
+ * @returns array validator that fails when the array arg length is above {@link n}
+ */
+export const maxSize = (n: number, errorCode: string = "max-size") =>
+  defineValidator<[] | string>(errorCode, (arg) => arg.length > n, { n });
 
-export const minSize = (n: number) =>
-  defineValidator<[] | string>("min-size", (arg) => arg.length < n, { n });
+/**
+ * @returns array validator that fails when the array arg length is below {@link n}
+ */
+export const minSize = (n: number, errorCode: string = "min-size") =>
+  defineValidator<[] | string>(errorCode, (arg) => arg.length < n, { n });
 
-export const rangeSize = (lowerBound: number, upperBound: number) =>
+/**
+ * @returns array validator that fails when the array arg length is not within the range [{@link lowerBound}, {@link upperBound}]
+ */
+export const rangeSize = (
+  lowerBound: number,
+  upperBound: number,
+  errorCode: string = "range-size"
+) =>
   defineValidator<[] | string>(
-    "range-size",
+    errorCode,
     (arg) => arg.length < lowerBound || arg.length > upperBound,
     { lowerBound, upperBound }
   );
 
-export const nonEmpty = defineValidator<[] | string>(
-  "non-empty",
-  (arg) => arg.length > 0
-);
+/**
+ * @returns array validator that fails when the array arg is empty [{@link lowerBound}, {@link upperBound}]
+ */
+export const nonEmpty = (errorCode: string = "non-empty") =>
+  defineValidator<[] | string>(errorCode, (arg) => arg.length === 0);
 
 //===================================
 // Strings
 //===================================
 
-export const pattern = (regexp: RegExp) =>
-  defineValidator<string>("pattern", (arg) => !regexp.test(arg), {
+/**
+ * @returns string validator that fails when the string arg does not respect {@link regexp} [{@link lowerBound}, {@link upperBound}]
+ */
+export const pattern = (regexp: RegExp, errorCode: string = "pattern") =>
+  defineValidator<string>(errorCode, (arg) => !regexp.test(arg), {
     regexp: regexp.source,
   });
-
-const isUrl = (s: string) => {
-  // TODO (import isUrl from "is-url-superb";) produces an error
-  return true;
-};
-
-export const validUrl = defineValidator<string>(
-  "invalid-url",
-  (arg) => !isUrl(arg)
-);
-
-export const validUrls = defineValidator<string[]>("invalid-urls", (arg) =>
-  arg.some((el) => !isUrl(el))
-);

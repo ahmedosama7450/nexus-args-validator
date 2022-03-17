@@ -18,20 +18,21 @@ import { andValidators } from "./validators";
  */
 export type ValidationResult = ValidationResultError | undefined;
 
+export type ValidationResultError =
+  | BaseValidationResultError
+  | ValidationResultError[];
+
 /**
  * First element represents error code
  *
  * Second element represents any extras related to validation
  */
-export type ValidationResultError =
-  | BaseValidationResultError
-  | ValidationResultError[];
-
 export type BaseValidationResultError = [string, ValidationResultErrorExtras];
 
-export type ValidationResultErrorExtras = {
-  [key: string]: number | string | boolean;
-} | null;
+export type ValidationResultErrorExtras = Record<
+  string,
+  number | string | boolean
+> | null;
 
 export type ErrorsTree = {
   [key: string]: ValidationResultError | ErrorsTree;
@@ -114,7 +115,7 @@ export interface ArgsValidatorPluginConfig {
 
   /**
    * Stop once a validation error is found.
-   * This means that errorsTree passed to {@link onValidationError} will consist if only one field
+   * If true, errorsTree passed to {@link onValidationError} will consist if only one field
    */
   abortEarly?: boolean;
 }
