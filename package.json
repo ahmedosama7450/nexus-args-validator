@@ -8,9 +8,10 @@
     "dist"
   ],
   "scripts": {
+    "prepare": "husky install",
     "build": "del-cli --force ./dist && tsup-node src/index.ts src/validators.ts src/transformers.ts --dts --minify",
     "test": "jest",
-    "prepare": "husky install"
+    "lint": "eslint src/**"
   },
   "repository": {
     "type": "git",
@@ -54,7 +55,10 @@
     "jest-get-type": "^27.5.1"
   },
   "lint-staged": {
-    "*.{ts,js}": "eslint --cache --fix",
+    "*.{ts,js}": [
+      "eslint --cache --fix",
+      "npm run test"
+    ],
     "*.{ts,js,html,css,md}": "prettier --write"
   }
 }
