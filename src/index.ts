@@ -7,8 +7,9 @@ import {
   printedGenTypingImport,
 } from "nexus/dist/core";
 import { join } from "path";
+import { getType } from "jest-get-type";
 
-import { mapObject, type } from "./utils";
+import { mapObject } from "./utils";
 import { MaybeNull, Resolver, TraversableObject } from "./types";
 import { combineTransformers } from "./transformers";
 import { andValidators } from "./validators";
@@ -223,7 +224,7 @@ function findErrors(
   return mapObject(
     validatorTree,
     (validator, arg) => {
-      const valueType = type(validator);
+      const valueType = getType(validator);
 
       if (valueType === "array") {
         return andValidators(validator)(arg);
@@ -251,7 +252,7 @@ function applyTransforms(
   return mapObject(
     transformerTree,
     (transformer, arg) => {
-      const valueType = type(transformer);
+      const valueType = getType(transformer);
 
       if (valueType === "array") {
         return combineTransformers(transformer)(arg);

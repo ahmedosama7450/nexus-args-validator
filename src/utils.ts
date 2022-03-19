@@ -1,4 +1,5 @@
 import { isPromiseLike, MaybePromise } from "nexus/dist/core";
+import { getType } from "jest-get-type";
 
 import { MaybeNull, TraversableObject } from "./types";
 
@@ -218,7 +219,7 @@ function mapObjectHelper(
 
     currentAccessKey[currentAccessKey.length - 1] = key;
 
-    if (type(value) === "object") {
+    if (getType(value) === "object") {
       if (!skipBranchCondition || !skipBranchCondition(value, relatedValue)) {
         const branch = mapObjectHelper(
           [...currentAccessKey],
@@ -268,36 +269,4 @@ function mapObjectHelper(
   }
 
   return resultObj;
-}
-
-// TODO Enhance type safety including type guards
-/**
- * More specific version of typeof. e.g. It handles null, arrays, regexp, date...
- * Copied from {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/typeof#real-world_usage}
- */
-export function type(obj: any, showFullClass: boolean = false): string {
-  // get toPrototypeString() of obj (handles all types)
-  if (showFullClass && typeof obj === "object") {
-    return Object.prototype.toString.call(obj);
-  }
-  if (obj == null) {
-    return (obj + "").toLowerCase();
-  } // implicit toString() conversion
-
-  var deepType = Object.prototype.toString.call(obj).slice(8, -1).toLowerCase();
-  if (deepType === "generatorfunction") {
-    return "function";
-  }
-
-  // Prevent overspecificity (for example, [object HTMLDivElement], etc).
-  // Account for functionish Regexp (Android <=2.3), functionish <object> element (Chrome <=57, Firefox <=52), etc.
-  // String.prototype.match is universally supported.
-
-  return deepType.match(
-    /^(array|bigint|date|error|function|generator|regexp|symbol)$/
-  )
-    ? deepType
-    : typeof obj === "object" || typeof obj === "function"
-    ? "object"
-    : typeof obj;
 }
