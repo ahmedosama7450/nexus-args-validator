@@ -34,7 +34,7 @@ export function defineValidator<T, S extends NullabilityStrategy = "normal">(
       : MaybeNull<T>
   ) => MaybePromise<boolean>,
   extras: ValidationResultErrorExtras = null,
-  takeErrorCondition: boolean = true,
+  takeErrorCondition = true,
   nullabilityStrategy?: S
 ): Validator<MaybeNullable<T>> {
   return (arg) => {
@@ -50,9 +50,11 @@ export function defineValidator<T, S extends NullabilityStrategy = "normal">(
 
     if (
       takeErrorCondition
-        ? // @ts-ignore
+        ? // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore
           errorOrPassCondition(arg)
-        : // @ts-ignore
+        : // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore
           !errorOrPassCondition(arg)
     ) {
       return [errorCode, extras];
@@ -135,14 +137,14 @@ export function orValidators<T>(
  */
 export function andValidators<T>(
   validators: [Validator<T>, Validator<T>, ...Validator<T>[]],
-  abortEarly: boolean = true,
+  abortEarly = true,
   error?: ValidationResultError
 ): Validator<T> {
   return (arg) => {
     return reduceAsync(
       validators,
 
-      (_, validator, __) => validator(arg),
+      (_, validator) => validator(arg),
 
       (acc, validationResult, _, returnEarly) => {
         if (validationResult != undefined) {
@@ -171,13 +173,13 @@ export function andValidators<T>(
 /**
  * @returns number validator that fails when the number arg is above {@link n}
  */
-export const max = (n: number, errorCode: string = "max") =>
+export const max = (n: number, errorCode = "max") =>
   defineValidator<number>(errorCode, (arg) => arg > n, { n });
 
 /**
  * @returns number validator that fails when the number arg is below {@link n}
  */
-export const min = (n: number, errorCode: string = "min") =>
+export const min = (n: number, errorCode = "min") =>
   defineValidator<number>(errorCode, (arg) => arg < n, { n });
 
 /**
@@ -186,7 +188,7 @@ export const min = (n: number, errorCode: string = "min") =>
 export const range = (
   lowerBound: number,
   upperBound: number,
-  errorCode: string = "range"
+  errorCode = "range"
 ) =>
   defineValidator<number>(
     errorCode,
@@ -201,13 +203,13 @@ export const range = (
 /**
  * @returns array validator that fails when the array arg length is above {@link n}
  */
-export const maxSize = (n: number, errorCode: string = "max-size") =>
+export const maxSize = (n: number, errorCode = "max-size") =>
   defineValidator<[] | string>(errorCode, (arg) => arg.length > n, { n });
 
 /**
  * @returns array validator that fails when the array arg length is below {@link n}
  */
-export const minSize = (n: number, errorCode: string = "min-size") =>
+export const minSize = (n: number, errorCode = "min-size") =>
   defineValidator<[] | string>(errorCode, (arg) => arg.length < n, { n });
 
 /**
@@ -216,7 +218,7 @@ export const minSize = (n: number, errorCode: string = "min-size") =>
 export const rangeSize = (
   lowerBound: number,
   upperBound: number,
-  errorCode: string = "range-size"
+  errorCode = "range-size"
 ) =>
   defineValidator<[] | string>(
     errorCode,
@@ -227,7 +229,7 @@ export const rangeSize = (
 /**
  * @returns array validator that fails when the array arg is empty [{@link lowerBound}, {@link upperBound}]
  */
-export const nonEmpty = (errorCode: string = "non-empty") =>
+export const nonEmpty = (errorCode = "non-empty") =>
   defineValidator<[] | string>(errorCode, (arg) => arg.length === 0);
 
 //===================================
@@ -237,7 +239,7 @@ export const nonEmpty = (errorCode: string = "non-empty") =>
 /**
  * @returns string validator that fails when the string arg does not respect {@link regexp} [{@link lowerBound}, {@link upperBound}]
  */
-export const pattern = (regexp: RegExp, errorCode: string = "pattern") =>
+export const pattern = (regexp: RegExp, errorCode = "pattern") =>
   defineValidator<string>(errorCode, (arg) => !regexp.test(arg), {
     regexp: regexp.source,
   });

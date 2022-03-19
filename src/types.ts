@@ -5,6 +5,7 @@ export type MaybeNullable<T> = T | null | undefined;
 
 export type MaybeNull<T> = T | null;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type TraversableObject = Record<string, any>;
 
 export type Resolver<

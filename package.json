@@ -55,10 +55,7 @@
     "jest-get-type": "^27.5.1"
   },
   "lint-staged": {
-    "*.{ts,js}": [
-      "eslint --cache --fix",
-      "npm run test"
-    ],
+    "*.{ts,js}": "eslint --cache --fix",
     "*.{ts,js,html,css,md}": "prettier --write"
   }
 }

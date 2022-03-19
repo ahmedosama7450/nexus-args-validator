@@ -49,7 +49,7 @@ type BaseValidatorTree<
   Args extends ArgsValue<string, string>
 > = {
   [key in keyof Args]?: Args[key] extends
-    | { [key: string]: any }
+    | { [key: string]: unknown }
     | null
     | undefined
     ?
@@ -70,7 +70,7 @@ type BaseTransformerTree<
   Args extends ArgsValue<string, string>
 > = {
   [key in keyof Args]?: Args[key] extends
-    | { [key: string]: any }
+    | { [key: string]: unknown }
     | null
     | undefined
     ?
@@ -229,9 +229,15 @@ function findErrors(
       const valueType = getType(validator);
 
       if (valueType === "array") {
-        return andValidators(validator)(arg);
+        return andValidators(
+          validator as [
+            Validator<unknown>,
+            Validator<unknown>,
+            ...Validator<unknown>[]
+          ]
+        )(arg);
       } else if (valueType === "function") {
-        return validator(arg);
+        return (validator as Validator<unknown>)(arg);
       }
 
       return validator;
@@ -251,15 +257,22 @@ function applyTransforms(
   args: GeneralArgsValue,
   transformerTree: TransformerTree<string, string>
 ): MaybePromise<GeneralArgsValue> {
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   return mapObject(
     transformerTree,
     (transformer, arg) => {
       const valueType = getType(transformer);
 
       if (valueType === "array") {
-        return combineTransformers(transformer)(arg);
+        return combineTransformers(
+          transformer as [
+            Transformer<unknown>,
+            Transformer<unknown>,
+            ...Transformer<unknown>[]
+          ]
+        )(arg);
       } else if (valueType === "function") {
-        return transformer(arg);
+        return (transformer as Transformer<unknown>)(arg);
       }
 
       return transformer;

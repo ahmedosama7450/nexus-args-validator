@@ -6,7 +6,7 @@ import { MaybeNull, TraversableObject } from "./types";
 export function assignObjectAt(
   obj: TraversableObject,
   accessKey: readonly string[],
-  value: any
+  value: unknown
 ) {
   const lastKeyPartIndex = accessKey.length - 1;
 
@@ -92,7 +92,7 @@ export function mapObject(
   /**
    * Note: Returned promises are collected and resolved all at once
    */
-  mapValue: (value: any, relatedValue: any) => any,
+  mapValue: (value: unknown, relatedValue: unknown) => unknown,
 
   options: {
     /**
@@ -112,24 +112,24 @@ export function mapObject(
      *
      * Note: {@link options.initialValue} will have no effect on the result object
      */
-    searchFor?: (mappedValue: any) => boolean;
+    searchFor?: (mappedValue: unknown) => boolean;
 
     /**
      * If the provided value is equal to the returned value from {@link options.mapValue} function, The field (key-value pair) is not included in the returned object
      * (Only works if value other than undefined is passed)
      */
-    skipValueCondition?: (mappedValue: any) => boolean;
+    skipValueCondition?: (mappedValue: unknown) => boolean;
 
     /**
      * Skip traversal of a nested object of {@link obj}
      */
     skipBranchCondition?: (
       branchObj: TraversableObject,
-      relatedValue: any
+      relatedValue: unknown
     ) => boolean;
   } = { initialValue: null, relatedObj: null }
 ): MaybePromise<MaybeNull<TraversableObject>> {
-  const promises: PromiseLike<any>[] = [];
+  const promises: PromiseLike<unknown>[] = [];
   const promisesAccessKeys: string[][] = [];
 
   const {
@@ -190,19 +190,19 @@ export function mapObject(
 
 function mapObjectHelper(
   currentAccessKey: string[],
-  promises: PromiseLike<any>[],
+  promises: PromiseLike<unknown>[],
   promisesAccessKeys: string[][],
 
   obj: TraversableObject,
-  mapValue: (value: any, relatedValue: any) => any,
+  mapValue: (value: unknown, relatedValue: unknown) => unknown,
 
   initialValue: MaybeNull<TraversableObject>,
   relatedObj: MaybeNull<TraversableObject>,
-  searchFor?: (mappedValue: any) => boolean,
-  skipValueCondition?: (mappedValue: any) => boolean,
+  searchFor?: (mappedValue: unknown) => boolean,
+  skipValueCondition?: (mappedValue: unknown) => boolean,
   skipBranchCondition?: (
     branchObj: TraversableObject,
-    relatedValue: any
+    relatedValue: unknown
   ) => boolean
 ): MaybeNull<TraversableObject> {
   let resultObj = initialValue;
