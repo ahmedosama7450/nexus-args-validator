@@ -100,7 +100,9 @@ export type GeneralArgsValue = TraversableObject;
 export interface ArgsValidatorPluginConfig {
   /**
    * This is where you handle the validation errors.
-   * Mostly you will be throwing an error containing `errorsTree`. e.g.
+   * Mostly you will be throwing an error containing `errorsTree`.
+   * 
+   * @example
    * ```
     throw new ApolloError(
           "One or more arguments failed validation",
