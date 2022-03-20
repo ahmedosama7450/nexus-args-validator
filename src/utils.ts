@@ -57,7 +57,7 @@ export function reduceAsync<T, K, U, E>(
       const restArrMaybePromises: MaybePromise<K>[] = [valueOrPromise];
 
       for (let j = i + 1; j < array.length; j++) {
-        restArrMaybePromises[j - i - 1] = evaluate(acc, array[j], j);
+        restArrMaybePromises[j - i] = evaluate(acc, array[j], j);
       }
 
       return Promise.all(restArrMaybePromises).then((restArr) => {
