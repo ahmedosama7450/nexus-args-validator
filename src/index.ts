@@ -218,7 +218,7 @@ export const argsValidatorPlugin = ({
     },
   });
 
-function findErrors(
+export function findErrors(
   args: GeneralArgsValue,
   validatorTree: ValidatorTree<string, string>,
   abortEarly: boolean
@@ -253,7 +253,7 @@ function findErrors(
   );
 }
 
-function applyTransforms(
+export function applyTransforms(
   args: GeneralArgsValue,
   transformerTree: TransformerTree<string, string>
 ): MaybePromise<GeneralArgsValue> {
