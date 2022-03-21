@@ -1,6 +1,6 @@
 {
   "name": "nexus-args-validator",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Nexus plugin to validate and transform graphql arguments",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
