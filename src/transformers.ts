@@ -76,3 +76,32 @@ export const uppercase: Transformer<string> = (arg) => {
 export const uppercaseNullable: Transformer<MaybeNullable<string>> = (arg) => {
   return arg ? arg.toUpperCase() : arg;
 };
+
+//===================================
+// Numbers
+//===================================
+
+/**
+ * @returns transformer that clamps the value of argument between {@link lowerBound} and {@link upperBound} if either or both of them are defined
+ */
+export const clamp: (
+  lowerBound?: number,
+  upperBound?: number
+) => Transformer<number> = (lowerBound, upperBound) => (arg) => {
+  if (lowerBound && arg < lowerBound) return lowerBound;
+  if (upperBound && arg > upperBound) return upperBound;
+  return arg;
+};
+
+/**
+ * Same as {@link clamp} but handles null and undefined values
+ */
+export const clampNullable: (
+  lowerBound?: number,
+  upperBound?: number
+) => Transformer<MaybeNullable<number>> = (lowerBound, upperBound) => (arg) => {
+  if (!arg) return arg;
+  if (lowerBound && arg < lowerBound) return lowerBound;
+  if (upperBound && arg > upperBound) return upperBound;
+  return arg;
+};

@@ -117,8 +117,8 @@ export interface ArgsValidatorPluginConfig {
   onValidationError: (errorsTree: ErrorsTree) => void;
 
   /**
-   * Stop once a validation error is found.
-   * If true, errorsTree passed to {@link onValidationError} will consist if only one field
+   * Stop once an argument fails validation.
+   * If true, errorsTree passed to {@link onValidationError} will consist of only one field
    */
   abortEarly?: boolean;
 }

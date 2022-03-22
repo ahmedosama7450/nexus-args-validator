@@ -201,19 +201,19 @@ export const range = (
 //===================================
 
 /**
- * @returns array validator that fails when the array arg length is above {@link n}
+ * @returns array/string validator that fails when the array arg length is above {@link n}
  */
 export const maxSize = (n: number, errorCode = "max-size") =>
   defineValidator<[] | string>(errorCode, (arg) => arg.length > n, { n });
 
 /**
- * @returns array validator that fails when the array arg length is below {@link n}
+ * @returns array/string validator that fails when the array arg length is below {@link n}
  */
 export const minSize = (n: number, errorCode = "min-size") =>
   defineValidator<[] | string>(errorCode, (arg) => arg.length < n, { n });
 
 /**
- * @returns array validator that fails when the array arg length is not within the range [{@link lowerBound}, {@link upperBound}]
+ * @returns array/string validator that fails when the array arg length is not within the range [{@link lowerBound}, {@link upperBound}]
  */
 export const rangeSize = (
   lowerBound: number,
@@ -227,7 +227,7 @@ export const rangeSize = (
   );
 
 /**
- * @returns array validator that fails when the array arg is empty [{@link lowerBound}, {@link upperBound}]
+ * @returns array validator that fails when the array arg is empty
  */
 export const nonEmpty = (errorCode = "non-empty") =>
   defineValidator<[] | string>(errorCode, (arg) => arg.length === 0);
@@ -237,7 +237,7 @@ export const nonEmpty = (errorCode = "non-empty") =>
 //===================================
 
 /**
- * @returns string validator that fails when the string arg does not respect {@link regexp} [{@link lowerBound}, {@link upperBound}]
+ * @returns string validator that fails when the string arg does not respect {@link regexp}
  */
 export const pattern = (regexp: RegExp, errorCode = "pattern") =>
   defineValidator<string>(errorCode, (arg) => !regexp.test(arg), {
