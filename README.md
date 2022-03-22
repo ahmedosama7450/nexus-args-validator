@@ -28,7 +28,7 @@ Personally, I prefere the first option as It gives you more freedom and moreover
 The problem is: mixing your resolver logic with the validation logic, makes the code
 look messy and makes it hard to reuse these validation rules in a predictable manner and that's where this plugin come into play!
 
-## Prinicples
+## Principles
 
 - Types-safety powered by [Nexus](https://nexusjs.org/). Argument names and types are inferred from the schema.
 - Async validation is supported. The cool thing is, no promises are created if If none of your validator functions return promises (Because internally, we are not using async/await but promises from different validators are collected and if there is any, they are executed and returned all at once using `Promise.all`)
@@ -79,7 +79,7 @@ The plugin adds two new properties to the field config:
 
 Errors are collected from all validators and if there is any, you will receive a callback with `errorsTree` that looks something like:
 
-```json
+```
 {
   "username": ["not-unique", null],
   "age": ["too-young", 18], // 18 is the minimum age
