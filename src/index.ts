@@ -15,7 +15,7 @@ import { combineTransformers } from "./transformers";
 import { andValidators } from "./validators";
 
 /**
- * undefined means validation passed
+ * undefined means validation passed.
  */
 export type ValidationResult = ValidationResultError | undefined;
 
